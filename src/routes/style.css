@@ -1,0 +1,46 @@
+:root {
+	--bg: rgb(180 178 178);
+	--black: rgb(20 20 20);
+	--pure-black: rgb(3 3 3);
+	--shadow-screen:
+		0.3rem 0.6rem 0.5rem 0 rgba(0, 0, 0, 0.15), 0.1rem 0.2rem 0.5rem 0 rgba(100, 100, 100, 0.4),
+		0.1rem 0.2rem 0.4rem 0.1rem rgba(80, 80, 80, 0.5),
+		0rem 0rem 0.02rem 0.4rem rgba(240, 240, 240, 0.04) inset;
+	--shadow-body:
+		0.3px 0.7px 0.8px hsl(var(--shadow-color) / 0.39),
+		1.2px 3.3px 3.6px -0.4px hsl(var(--shadow-color) / 0.37),
+		2.3px 6.3px 6.9px -0.9px hsl(var(--shadow-color) / 0.35),
+		4.1px 10.9px 12px -1.3px hsl(var(--shadow-color) / 0.33),
+		6.8px 18.3px 20.1px -1.8px hsl(var(--shadow-color) / 0.31),
+		11.1px 29.8px 32.7px -2.2px hsl(var(--shadow-color) / 0.29),
+		17.4px 46.5px 51px -2.7px hsl(var(--shadow-color) / 0.27),
+		26px 69.7px 76.4px -3.1px hsl(var(--shadow-color) / 0.25);
+}
+@font-face {
+	font-family: Calculator;
+	src: url(/Calculator.ttf);
+}
+body {
+	font-family: 'Sometype Mono', monospace;
+	font-optical-sizing: auto;
+	font-weight: 400;
+	font-style: normal;
+	background: var(--black);
+	text-rendering: optimizeLegibility;
+	font-synthesis: none;
+	-webkit-font-smoothing: antialiased;
+}
+
+.display {
+}
+
+input,
+button,
+select {
+	border: solid 1px var(--black);
+	background: transparent;
+	padding: 6px 4px;
+	box-shadow: 0 2px 2px rgb(255 255 255 / 0.2) inset;
+	background: rgb(255 255 255 / 0.2);
+	border-radius: 4px;
+}

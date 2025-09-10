@@ -45,7 +45,6 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
   - Typo in status UI: "Eroror" (should be "Error").
   - Inconsistent imports for date state: `'$lib/DateState.svelte'` vs `'$lib/DateState.svelte.ts'`.
   - `static/models/rmbg2016.onnx` is currently unused; only `rmbg14.onnx` is referenced.
-  - `static/onnxruntime-web/` contains many variants (webgpu/webgl/node/bundles) that aren’t used with the current WASM-only approach.
   - `vite-plugin-devtools-json` is included but not used in the codebase.
   - A stray file named `'` appears at repo root (likely accidental).
   - Mixed lockfile story: `bun.lock` is committed but `package.json` does not declare a package manager. Consider standardizing on one (Bun, pnpm, or npm).
@@ -53,13 +52,19 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
   - OffscreenCanvas `convertToBlob()` may vary across browsers; this project targets Chromium where it’s supported.
   - WebGPU/WebGL pathways are disabled in the worker right now. That’s intentional for stability, but keep in mind performance tradeoffs on capable devices.
 
-**What’s Extraneous (Safe to Trim Later)**
+**ORT Runtime Files (WASM-only minimal set)**
 
-- `static/models/rmbg2016.onnx` (unused by current code path).
-- Most files under `static/onnxruntime-web/` given WASM-only usage. You likely need a minimal subset:
-  - `ort.wasm.min.(js|mjs)` and the matching `.map` (optional)
-  - `ort-wasm-simd-threaded.(wasm|mjs)` (and `.map` optional)
-  - Keep what `onnxruntime-web` actually requests in network logs when running with `env.wasm.proxy = false`.
+- The project now ships a trimmed `static/onnxruntime-web/` for WASM-only execution (no WebGPU/WebGL/bundles). Kept files:
+  - `ort.wasm.min.js`
+  - `ort.wasm.min.mjs`
+  - `ort-wasm-simd-threaded.wasm`
+  - `ort-wasm-simd-threaded.mjs`
+- Source maps are optional and removed to reduce size.
+- If you ever switch providers or see 404s in Network devtools, re-add only what `onnxruntime-web` fetches with `env.wasm.proxy = false`.
+
+**What’s Extraneous (post-trim)**
+
+- `static/models/rmbg2016.onnx` is intentionally kept as-is per request but remains unused by default.
 - `vite-plugin-devtools-json` dependency and plugin registration if there’s no JSON devtools usage.
 
 **Recommended Next Steps**
@@ -67,11 +72,9 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
 - **Polish & correctness:**
   - Fix the “Eroror” typo in `src/routes/+page.svelte` status area.
   - Standardize imports to `'$lib/DateState.svelte'` (or the explicit `.svelte.ts`) consistently across files.
-  - Add the second model as a fallback source: update `SegmentationEngine` `modelSources` to include `'/models/rmbg2016.onnx'` as a backup.
 - **Reduce bundle/static weight:**
-  - Remove unused ORT variants from `static/onnxruntime-web/` after confirming which files are fetched in practice.
-  - Remove `static/models/rmbg2016.onnx` if you decide not to use it as fallback.
-  - Drop `vite-plugin-devtools-json` if not needed.
+  - Keep monitoring Network requests to ensure no missing ORT assets after the trim.
+  - Remove `vite-plugin-devtools-json` if not needed.
 - **DX & consistency:**
   - Choose a single package manager; add `"packageManager": "bun@<version>"` (or `pnpm@…`/`npm@…`) to `package.json` and commit the corresponding lockfile only.
   - Add a minimal CI workflow to run `npm run lint` and `npm run check` on PRs.
@@ -86,7 +89,7 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
 **Deploying**
 
 - Cloudflare adapter targets Workers; ensure static assets under `static/` (models and ORT files) are uploaded and cached. COOP/COEP are set by `hooks.server.ts` in production.
-- Large static payload: trimming `static/onnxruntime-web/` can noticeably reduce upload time and cache footprint.
+- Smaller static payload after trimming `static/onnxruntime-web/` reduces upload time and cache footprint.
 
 **Troubleshooting**
 
@@ -104,6 +107,6 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
 - `src/lib/SegmentationEngine.ts`: Worker wrapper and model lifecycle.
 - `src/lib/segmentation/worker.ts`: ONNX runtime setup and matting pipeline.
 - `static/models/*`: ONNX models (currently using `rmbg14.onnx`).
-- `static/onnxruntime-web/*`: ORT browser runtime files (trim as noted above).
+- `static/onnxruntime-web/*`: Minimal ORT browser runtime files for WASM.
 
-This README captures the current state, highlights what’s extraneous, outlines known issues, and proposes a focused path to a leaner, production-ready repo. If you’d like, I can tackle the cleanups and small fixes as a follow-up PR.
+This README reflects the new minimal ORT set and keeps `rmbg2016.onnx` untouched. I can also fix the small code nits (typo, imports) in a follow-up if you want.

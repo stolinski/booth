@@ -5,5 +5,12 @@
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"
+	},
+	"vars": {
+		// Primary or comma-separated list of model URLs
+		// Defaults to the built-in static asset path
+		"PUBLIC_RMBG_MODEL_URLS": "/models/modnet_portrait.onnx",
+		// Single URL fallback (also read by app)
+		"PUBLIC_RMBG_MODEL_URL": "/models/modnet_portrait.onnx"
 	}
 }

@@ -32,7 +32,27 @@ function postPhase(phase: string, detail?: string) {
 // Removed per-provider timeouts for stability during development.
 
 async function fetchModelBlob(modelPath: string): Promise<Uint8Array> {
-	const res = await fetch(modelPath);
+	const req = new Request(modelPath, { mode: 'cors', credentials: 'omit' });
+	try {
+		if (typeof caches !== 'undefined' && (caches as any).open) {
+			const cache = await caches.open('booth-models-v1');
+			const cached = await cache.match(req);
+			if (cached) {
+				try {
+					postPhase('cache_hit', modelPath);
+				} catch {}
+				return new Uint8Array(await cached.arrayBuffer());
+			}
+			const res = await fetch(req);
+			if (!res.ok) throw new Error(`fetch ${res.status}`);
+			try {
+				await cache.put(req, res.clone());
+				postPhase('cache_store', modelPath);
+			} catch {}
+			return new Uint8Array(await res.arrayBuffer());
+		}
+	} catch {}
+	const res = await fetch(req);
 	if (!res.ok) throw new Error(`fetch ${res.status}`);
 	return new Uint8Array(await res.arrayBuffer());
 }
@@ -68,6 +88,10 @@ async function createSession(modelBytes: Uint8Array) {
 async function ensureLoaded(paths: string[]) {
 	if (session) return;
 	if (loading) return loading;
+	if (!paths || paths.length === 0) {
+		postPhase('config_error_no_model_urls', 'no model URLs provided');
+		throw new Error('no model URLs provided');
+	}
 	loading = (async () => {
 		let lastErr: any = null;
 		for (const p of paths) {

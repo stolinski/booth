@@ -504,7 +504,7 @@
 				{/if}
 			{:else if model_error}
 				<span>
-					Eroror: {model_error}
+					Error: {model_error}
 				</span>
 			{:else}
 				{'__'}

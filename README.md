@@ -7,9 +7,9 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
 **Quick Start**
 
 - **Prereqs:** Node 20+ (or Bun), modern Chromium-based browser. File System Access API and OffscreenCanvas are required for full functionality.
-- **Install:** `pnpm i` or `npm i` or `bun i` (pick one and stick with it).
-- **Dev:** `npm run dev` then open the printed URL.
-- **Build:** `npm run build` • **Preview:** `npm run preview`
+- **Install:** `bun install` (or `bun i`).
+- **Dev:** `bun run dev` then open the printed URL.
+- **Build:** `bun run build` • **Preview:** `bun run preview`
 - **First run:**
   - Click “pick root folder” and grant read/write permissions.
   - Start camera, select device if needed.
@@ -26,7 +26,7 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
   - Cutouts are saved to `YYYY-MM-DD/cutout/<emotion>.png`.
 - **Segmentation:**
   - `src/lib/SegmentationEngine.ts` wraps a Web Worker (`src/lib/segmentation/worker.ts`).
-  - Model: `static/models/rmbg14.onnx`. Worker prefers WASM-only provider for stability.
+  - Model: `static/models/rmbg14.onnx` (default). You can override via `PUBLIC_RMBG_MODEL_URL` or comma-separated `PUBLIC_RMBG_MODEL_URLS`; the local file remains as a fallback. Worker prefers WASM-only provider for stability.
   - ORT runtime assets are served from `static/onnxruntime-web/` and configured via `ort.env.wasm.wasmPaths`.
   - The worker preprocesses, runs inference, refines edges, and scales the alpha matte back to the original size.
 - **COOP/COEP:**
@@ -76,7 +76,7 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
   - Keep monitoring Network requests to ensure no missing ORT assets after the trim.
   - Remove `vite-plugin-devtools-json` if not needed.
 - **DX & consistency:**
-  - Choose a single package manager; add `"packageManager": "bun@<version>"` (or `pnpm@…`/`npm@…`) to `package.json` and commit the corresponding lockfile only.
+  - Choose a single package manager; add "packageManager": "bun@<version>" (or `pnpm@…`/`npm@…`) to `package.json` and commit the corresponding lockfile only.
   - Add a minimal CI workflow to run `npm run lint` and `npm run check` on PRs.
 - **UX improvements:**
   - Surface segmentation errors per-emotion in the gallery with a retry button.
@@ -110,3 +110,18 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
 - `static/onnxruntime-web/*`: Minimal ORT browser runtime files for WASM.
 
 This README reflects the new minimal ORT set and keeps `rmbg2016.onnx` untouched. I can also fix the small code nits (typo, imports) in a follow-up if you want.
+
+---
+
+**Cloudflare R2 CORS (exact JSON)**
+
+```json
+[
+	{
+		"AllowedOrigins": ["*"],
+		"AllowedMethods": ["GET", "HEAD"],
+		"ExposeHeaders": ["ETag", "Content-Length", "Accept-Ranges", "Content-Range"],
+		"MaxAgeSeconds": 86400
+	}
+]
+```

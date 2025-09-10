@@ -1,0 +1,36 @@
+AGENTS for this repo (SvelteKit v2 + Svelte 5)
+
+- Dev: `bun run dev` • Build: `bun run build` • Preview: `bun run preview`
+- Lint: `bun run lint` (Prettier check + ESLint) • Format: `bun run format`
+- Typecheck: `npm run check` • Watch: `npm run check:watch`
+- Tests: none configured; when adding Vitest: `npx vitest`, single file: `npx vitest path/to/file.test.ts`, single test: `npx vitest -t "name"`
+- Single-file lint/format: `eslint path` (add `--fix`) • `prettier --write path`
+- ESM only (`"type":"module"`); prefer `$lib/...` for internal modules, relative for siblings
+- Import order: std libs → external → `$lib` → relative; avoid deep `../..` chains
+- Formatting (Prettier): useTabs=true, singleQuote=true, trailingComma=none, printWidth=100
+- Svelte formatting via `prettier-plugin-svelte`; format `.svelte` files too
+- ESLint: `@eslint/js` + `typescript-eslint` + `eslint-plugin-svelte`; `no-undef` off for TS
+- Types: TS `strict` on; `allowJs`+`checkJs` enabled—keep JSDoc types in JS when editing
+- Prefer explicit return types for exported APIs; avoid `any`, prefer `unknown` and narrow
+- Error handling: try/catch async; show user-facing messages via `StatusBar`; `console.error` for diagnostics
+- Components: PascalCase `.svelte`; Svelte runes modules as `*.svelte.ts`; workers live in `src/lib/segmentation/`
+- Modules: classes PascalCase (e.g., `SegmentationEngine.ts`); pure utils kebab-case filenames
+- Imports must be side‑effect‑free; do not import Svelte in Web Workers
+- Runtime assets: keep ONNX runtime under `static/onnxruntime-web/`; reference via `/onnxruntime-web/...`
+- COOP/COEP: keep headers in `vite.config.ts` and `src/hooks.server.ts` to stay `crossOriginIsolated`
+- Cursor/Copilot rules: none present (`.cursor/`, `.cursorrules`, `.github/copilot-instructions.md` not found)
+
+---
+
+Cloudflare R2 CORS (exact JSON)
+
+```json
+[
+	{
+		"AllowedOrigins": ["*"],
+		"AllowedMethods": ["GET", "HEAD"],
+		"ExposeHeaders": ["ETag", "Content-Length", "Accept-Ranges", "Content-Range"],
+		"MaxAgeSeconds": 86400
+	}
+]
+```

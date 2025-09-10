@@ -1,7 +1,13 @@
 <script lang="ts">
+	import FileDirectoryManager from '$lib/components/FileDirectoryManager.svelte';
+	import CameraControls from '$lib/components/CameraControls.svelte';
+	import VideoCapture from '$lib/components/VideoCapture.svelte';
+	import EmotionGallery from '$lib/components/EmotionGallery.svelte';
+	import StatusBar from '$lib/components/StatusBar.svelte';
+	import { dateState } from '$lib/DateState.svelte';
 	// svelte 5 runes version (snake_case everywhere, no css)
 
-	// ===== config =====
+	// static config (emotion list)
 	const emotion_list = [
 		'happy',
 		'surprised',
@@ -14,33 +20,38 @@
 		'thumbs_up'
 	];
 
-	// ===== camera state (runes) =====
-	let video_el: HTMLVideoElement; // element ref (not a rune)
+	// camera + session state (local)
+	let video_el = $state<HTMLVideoElement | null>(null);
 	let media_stream = $state<MediaStream | null>(null);
 	let video_devices = $state<MediaDeviceInfo[]>([]);
 	let selected_device_id = $state('');
 
-	// ===== capture/session state =====
 	let countdown_value = $state(0);
 	let flash_active = $state(false);
 	let session_running = $state(false);
 	let current_emotion_index = $state(0);
 	let status_msg = $state('');
 
-	// live derived emotion for overlays
+	// derived current emotion
 	const current_emotion = $derived(emotion_list[current_emotion_index] || '');
 
-	// ===== file system state =====
+	// filesystem + photos (remain local except selected_day via dateState)
 	let root_handle = $state<FileSystemDirectoryHandle | null>(null);
-	let day_list = $state<string[]>([]);
-	let selected_day = $state('');
 	let day_photos = $state<Record<string, { handle: FileSystemFileHandle; url: string }>>({});
+
+	// selected_day externalized (list also external now)
+
+	// cutout processing state
+	let processing_cutouts = $state(false);
+	let model_loading = $state(true);
+	let model_error = $state('');
 
 	// ===== idb persistence =====
 	const DB_NAME = 'photo_booth';
 	const STORE = 'handles';
 
 	function open_db(): Promise<IDBDatabase> {
+		// legacy path during migration
 		return new Promise((resolve, reject) => {
 			const req = indexedDB.open(DB_NAME, 1);
 			req.onupgradeneeded = () => {
@@ -53,6 +64,7 @@
 	}
 
 	async function save_root_handle(handle: FileSystemDirectoryHandle) {
+		// legacy path during migration
 		try {
 			const db = await open_db();
 			const tx = db.transaction(STORE, 'readwrite');
@@ -61,6 +73,7 @@
 	}
 
 	async function load_root_handle(): Promise<FileSystemDirectoryHandle | null> {
+		// legacy path during migration
 		try {
 			const db = await open_db();
 			return await new Promise((resolve, reject) => {
@@ -101,8 +114,8 @@
 			await ensure_permission(root_handle);
 			await save_root_handle(root_handle);
 			await load_days();
-			selected_day = today_str();
-			await load_day_photos(selected_day);
+			dateState.setSelectedDay(today_str());
+			await load_day_photos(dateState.selected_day);
 			status_msg = 'root selected';
 		} catch {
 			status_msg = 'root selection cancelled';
@@ -110,26 +123,33 @@
 	}
 
 	async function load_days() {
-		day_list = [];
-		if (!root_handle) return;
-		for await (const [name, entry] of (root_handle as any).entries()) {
-			if (entry.kind === 'directory' && /^\d{4}-\d{2}-\d{2}$/.test(name)) day_list.push(name);
+		if (!root_handle) {
+			dateState.setDayList([]);
+			return;
 		}
-		day_list.sort().reverse();
-		if (!day_list.includes(today_str())) day_list.unshift(today_str());
+		const list: string[] = [];
+		for await (const [name, entry] of (root_handle as any).entries()) {
+			if (entry.kind === 'directory' && /^\d{4}-\d{2}-\d{2}$/.test(name)) list.push(name);
+		}
+		list.sort().reverse();
+		if (!list.includes(today_str())) list.unshift(today_str());
+		dateState.setDayList(list);
 	}
 
 	async function get_day_dir(date: string, create = true) {
+		// proxy
 		if (!root_handle) throw new Error('no root directory');
 		return await root_handle.getDirectoryHandle(date, { create });
 	}
 
 	function revoke_day_urls() {
+		// proxy
 		for (const k in day_photos) URL.revokeObjectURL(day_photos[k].url);
 		day_photos = {};
 	}
 
 	async function load_day_photos(date: string) {
+		// proxy
 		revoke_day_urls();
 		if (!root_handle) return;
 		try {
@@ -149,17 +169,27 @@
 
 	// ===== camera handling =====
 	async function enumerate_video_devices() {
+		// proxy
 		try {
 			const list = await navigator.mediaDevices.enumerateDevices();
 			video_devices = list.filter((d) => d.kind === 'videoinput');
-			if (!selected_device_id && video_devices.length)
+			// attempt to restore last used device if available
+			let last = '';
+			try {
+				last = localStorage.getItem('last_camera_device') || '';
+			} catch {}
+			if (last && video_devices.some((d) => d.deviceId === last)) {
+				selected_device_id = last;
+			} else if (!selected_device_id && video_devices.length) {
 				selected_device_id = video_devices[0].deviceId;
+			}
 		} catch {
 			status_msg = 'device enumeration failed';
 		}
 	}
 
 	async function start_stream() {
+		// proxy
 		if (media_stream) {
 			media_stream.getTracks().forEach((t) => t.stop());
 			media_stream = null;
@@ -172,6 +202,9 @@
 				video_el.srcObject = media_stream;
 				await video_el.play();
 			}
+			try {
+				if (selected_device_id) localStorage.setItem('last_camera_device', selected_device_id);
+			} catch {}
 			await enumerate_video_devices();
 			status_msg = 'camera ready';
 		} catch {
@@ -181,6 +214,7 @@
 
 	// ===== capture logic =====
 	async function countdown_and_capture(emotion: string, date: string) {
+		// proxy
 		// ensure overlay emotion matches even for single retake
 		current_emotion_index = emotion_list.indexOf(emotion);
 		countdown_value = 3;
@@ -195,18 +229,20 @@
 	}
 
 	async function capture_emotion(emotion: string, date: string) {
+		// proxy
 		if (!media_stream) throw new Error('no stream');
 		if (!root_handle) throw new Error('no root');
 		const track = media_stream.getVideoTracks()[0];
 		const settings = track.getSettings();
-		const width = (video_el?.videoWidth || settings.width || 1280) as number;
-		const height = (video_el?.videoHeight || settings.height || 720) as number;
+		const el = video_el;
+		const width = (el?.videoWidth || settings.width || 1280) as number;
+		const height = (el?.videoHeight || settings.height || 720) as number;
 		const canvas = document.createElement('canvas');
 		canvas.width = width;
 		canvas.height = height;
 		const ctx = canvas.getContext('2d');
 		if (!ctx) throw new Error('no context');
-		ctx.drawImage(video_el, 0, 0, width, height);
+		ctx.drawImage(el, 0, 0, width, height);
 		const blob: Blob = await new Promise((res) => canvas.toBlob((b) => res(b!), 'image/png'));
 		const dir = await get_day_dir(date, true);
 		const file_name = `${emotion}.png`;
@@ -231,7 +267,7 @@
 		session_running = true;
 		current_emotion_index = 0;
 		const date = today_str();
-		selected_day = date;
+		dateState.setSelectedDay(date);
 		await load_days();
 		for (let i = 0; i < emotion_list.length; i++) {
 			current_emotion_index = i;
@@ -242,6 +278,8 @@
 		session_running = false;
 		await load_days();
 		await load_day_photos(date);
+		// auto process after full session
+		process_day_cutouts(date);
 	}
 
 	async function retake_one(emotion: string) {
@@ -249,12 +287,12 @@
 			status_msg = 'start camera';
 			return;
 		}
-		if (!selected_day) {
+		if (!dateState.selected_day) {
 			status_msg = 'select day';
 			return;
 		}
 		status_msg = `retake: ${emotion}`;
-		await countdown_and_capture(emotion, selected_day);
+		await countdown_and_capture(emotion, dateState.selected_day);
 		status_msg = `${emotion} updated`;
 	}
 
@@ -263,7 +301,7 @@
 			status_msg = 'start camera';
 			return;
 		}
-		if (!selected_day) {
+		if (!dateState.selected_day) {
 			status_msg = 'select day';
 			return;
 		}
@@ -271,18 +309,142 @@
 		for (let i = 0; i < emotion_list.length; i++) {
 			current_emotion_index = i;
 			status_msg = `retake: ${emotion_list[i]}`;
-			await countdown_and_capture(emotion_list[i], selected_day);
+			await countdown_and_capture(emotion_list[i], dateState.selected_day);
 		}
 		session_running = false;
 		status_msg = 'all retaken';
+		// auto process after bulk retake
+		process_day_cutouts(dateState.selected_day);
 	}
 
 	async function change_day(day: string) {
-		selected_day = day;
+		dateState.setSelectedDay(day);
 		await load_day_photos(day);
 	}
 
-	// ===== initial effect (mount) =====
+	// ===== cutout processing (post-session or manual) =====
+	import { segmentationEngine } from '$lib/SegmentationEngine';
+
+	let model_phase = $state('');
+	let model_phase_detail = $state('');
+	let model_provider = $state('');
+	let model_model_path = $state('');
+
+	const offPhase = segmentationEngine.onPhase((p, d) => {
+		try {
+			const detail = typeof d === 'string' ? d : d ? JSON.stringify(d) : '';
+			console.log('[segmentation][phase]', p, detail);
+			model_phase = p;
+			model_phase_detail = detail;
+			if (p === 'provider') model_provider = detail;
+			if (p === 'ready') {
+				model_loading = false;
+				model_error = '';
+				model_model_path = model_phase_detail || model_model_path;
+				status_msg = 'model ready';
+			} else if (p === 'error') {
+				// Show error detail but do not override camera-related status
+				model_loading = false;
+				model_error = detail || 'model error';
+			} else if (p === 'source_fail') {
+				// show last failure if no model succeeded yet
+				if (!model_provider && !segmentationEngine.isReady()) model_error = detail || '';
+			}
+		} catch (err) {
+			console.error('[segmentation][phase][handler_error]', err);
+		}
+	});
+
+	async function process_day_cutouts(day: string) {
+		console.log('[cutouts] start', { day, ready: segmentationEngine.isReady() });
+		if (processing_cutouts) return;
+		if (!root_handle) return;
+		if (!segmentationEngine.isReady()) {
+			console.log('[cutouts] model not ready, initiating load');
+			status_msg = 'loading model...';
+			try {
+				await segmentationEngine.loadModel();
+			} catch (e) {
+				model_error = (e as any)?.message || 'model unavailable';
+				status_msg = 'model unavailable (fallback)';
+				// Continue anyway to surface errors during segment attempts
+			}
+		}
+		processing_cutouts = true;
+		console.log('[cutouts] processing loop begin');
+		status_msg = 'processing cutouts...';
+		try {
+			const day_dir = await get_day_dir(day, false);
+			const cutout_dir = await day_dir.getDirectoryHandle('cutout', { create: true });
+			let processed = 0;
+			const total = emotion_list.length;
+			for (const emo of emotion_list) {
+				console.log('[cutouts] emotion start', emo);
+				const photo = day_photos[emo];
+				if (!photo) {
+					console.log('[cutouts] missing photo', emo);
+					processed++;
+					status_msg = `processing cutouts... (${processed}/${total})`;
+					continue;
+				}
+				try {
+					const file = await photo.handle.getFile();
+					console.log('[cutouts] file acquired', emo, file.size);
+					const bitmap = await createImageBitmap(file);
+					console.log('[cutouts] bitmap created', emo, bitmap.width, bitmap.height);
+					// Draw BEFORE segmentation because bitmap will be transferred to worker (detached afterwards)
+					const pre_canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+					const pre_ctx = pre_canvas.getContext('2d');
+					if (!pre_ctx) {
+						processed++;
+						status_msg = `processing cutouts... (${processed}/${total})`;
+						continue;
+					}
+					pre_ctx.drawImage(bitmap, 0, 0);
+					// Now run segmentation (transfers bitmap)
+					const { alpha } = await segmentationEngine.segment(bitmap);
+					console.log('[cutouts] segmentation done', emo, alpha.width, alpha.height);
+					const src = pre_ctx.getImageData(0, 0, pre_canvas.width, pre_canvas.height);
+					const data = src.data;
+					for (let i = 0; i < data.length; i += 4) data[i + 3] = alpha.data[i + 3];
+					pre_ctx.putImageData(src, 0, 0);
+					const blob: Blob = await pre_canvas.convertToBlob({ type: 'image/png' });
+					console.log('[cutouts] blob size', emo, blob.size);
+					const fh = await cutout_dir.getFileHandle(`${emo}.png`, { create: true });
+					const writable = await fh.createWritable();
+					await writable.write(blob);
+					await writable.close();
+					processed++;
+					status_msg = `processing cutouts... (${processed}/${total})`;
+				} catch (err) {
+					console.log('[cutouts] segmentation error', emo, err);
+					processed++;
+					status_msg = `processing cutouts... (${processed}/${total})`;
+					continue;
+				}
+			}
+			if (processed === 0) status_msg = 'no cutouts created';
+			else status_msg = 'cutouts complete';
+		} catch (e: any) {
+			status_msg = 'cutouts failed';
+			if (!model_error && (e as any)?.message) model_error = (e as any).message;
+		} finally {
+			processing_cutouts = false;
+		}
+	}
+
+	async function retry_model() {
+		model_loading = true;
+		model_error = '';
+		status_msg = 'retrying model load';
+		try {
+			await segmentationEngine.loadModel();
+		} catch (e: any) {
+			model_loading = false;
+			model_error = e?.message || 'model load failed';
+		}
+	}
+
 	$effect.root(() => {
 		let active = true;
 		(async () => {
@@ -298,12 +460,15 @@
 			}
 			if (root_handle) {
 				await load_days();
-				selected_day = today_str();
-				await load_day_photos(selected_day);
+				dateState.setSelectedDay(today_str());
+				await load_day_photos(dateState.selected_day);
 			}
 			try {
 				await start_stream();
 			} catch {}
+			segmentationEngine.loadModel().catch((e) => {
+				console.warn('[segmentation][load][deferred_error]', e);
+			});
 		})();
 		return () => {
 			active = false;
@@ -314,140 +479,71 @@
 </script>
 
 <div class="device">
-	<h1>The booth</h1>
-	<div>
-		<button on:click={pick_root} disabled={!!root_handle}
-			>{root_handle ? 'root picked' : 'pick root folder'}</button
-		>
-		{#if root_handle}<span> root: {(root_handle as any).name}</span>{/if}
-	</div>
-	<div>
-		<label
-			>camera:
-			<select bind:value={selected_device_id} on:change={start_stream} disabled={session_running}>
-				{#each video_devices as d}
-					<option value={d.deviceId}>{d.label || 'camera'}</option>
-				{/each}
-			</select>
-		</label>
-		<button on:click={start_stream} disabled={session_running}>start camera</button>
-	</div>
+	<StatusBar {status_msg}>
+		<p>
+			ai:
+			{#if model_loading || model_phase || model_error}
+				{#if model_phase === 'provider_webgpu_init_fail'}WebGPU init fail: {model_phase_detail}{/if}
+				{#if model_phase === 'provider_fail'}Provider failed: {model_phase_detail}{/if}
+				{#if model_phase === ''}Loading matting model…{/if}
+				{#if model_phase === 'fetch'}Fetching: {model_phase_detail}{/if}
+				{#if model_phase === 'init'}Initializing session…{/if}
+				{#if model_phase === 'provider_try'}Trying providers: {model_phase_detail}{/if}
+				{#if model_phase === 'provider'}Provider: {model_provider}{/if}
+				{#if model_phase === 'infer_ms'}Last inference: {model_phase_detail} ms{/if}
+				{#if model_phase === 'source_fail'}Source failed: {model_phase_detail}{/if}
+				{#if model_provider && !model_error}
+					<span>
+						Phase: {model_phase}
+						{#if model_phase_detail}({model_phase_detail}){/if}
+					</span>
 
-	<video bind:this={video_el} autoplay playsinline></video>
-	{#if countdown_value > 0}
-		<div>
-			<h2 class="countdown">{countdown_value}</h2>
-			{#if current_emotion}<p>pose: {current_emotion}</p>{/if}
-		</div>
-	{/if}
-	{#if flash_active}
-		<div>FLASH</div>
-	{/if}
-
-	<div>
-		<button on:click={run_session} disabled={session_running || !root_handle}
-			>capture all emotions (today)</button
-		>
-		<button on:click={retake_all_for_day} disabled={session_running || !selected_day}
-			>retake all for selected day</button
-		>
-	</div>
-
-	<div class="feed">
-		<select
-			bind:value={selected_day}
-			on:change={(e) => change_day((e.target as HTMLSelectElement).value)}
-		>
-			{#each day_list as d}
-				<option value={d}>{d}</option>
-			{/each}
-		</select>
-		{#if selected_day}
-			<ul>
-				{#each emotion_list as emo, i}
-					<li>
-						<span>{emo}</span>
-						{#if day_photos[emo]}
-							<img alt={emo} src={day_photos[emo].url} />
-							<button disabled={session_running} on:click={() => retake_one(emo)}>retake</button>
-						{:else}
-							<span>missing</span>
-							<button disabled={session_running || !media_stream} on:click={() => retake_one(emo)}
-								>capture</button
-							>
-						{/if}
-						{#if session_running && current_emotion_index === i}<span> (capturing...)</span>{/if}
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</div>
-
-	<div class="status">
-		<p>status: {status_msg}</p>
-	</div>
+					<span>
+						Loaded model: {model_model_path} via {model_provider}
+					</span>
+				{/if}
+			{:else if model_error}
+				<span>
+					Eroror: {model_error}
+				</span>
+			{:else}
+				{'__'}
+			{/if}
+		</p>
+	</StatusBar>
+	<FileDirectoryManager {root_handle} {pick_root} />
+	<CameraControls bind:selected_device_id {video_devices} {start_stream} {session_running} />
+	<VideoCapture
+		bind:video_el
+		{countdown_value}
+		{flash_active}
+		{current_emotion}
+		{run_session}
+		{retake_all_for_day}
+		{root_handle}
+		{session_running}
+		process_day_cutouts={() =>
+			dateState.selected_day && process_day_cutouts(dateState.selected_day)}
+		{processing_cutouts}
+	/>
+	<EmotionGallery
+		{emotion_list}
+		{day_photos}
+		{retake_one}
+		{session_running}
+		{current_emotion_index}
+		{media_stream}
+		day_list={dateState.day_list}
+		{change_day}
+	/>
 </div>
 
 <style>
-	h1 {
-		text-transform: uppercase;
-		font-weight: 400;
-		font-size: 16px;
-		text-align: center;
-	}
-	video {
-		box-shadow: var(--shadow-screen);
-		background: var(--black);
-		margin: 1rem auto;
-		display: block;
-	}
 	.device {
 		background: var(--bg);
 		padding: 20px;
 		margin: 1rem;
 		border-radius: 2px;
 		box-shadow: var(--shadow-body);
-	}
-
-	.feed {
-		ul {
-			display: grid;
-			grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-			padding: 0;
-			list-style: none;
-			background: var(--black);
-			box-shadow: var(--shadow-screen);
-			img {
-				width: 100%;
-			}
-			li {
-				color: var(--bg);
-				position: relative;
-				display: block;
-				margin: 0;
-				overflow: hidden;
-				span {
-					background: var(--black);
-					position: absolute;
-					text-transform: uppercase;
-					display: block;
-					font-size: 12px;
-					inset-inline: 0;
-					padding: 2px 5px;
-				}
-				button {
-					position: absolute;
-				}
-			}
-		}
-	}
-	.countdown {
-		font-family: 'Calculator';
-	}
-	.status {
-		box-shadow: var(--shadow-screen);
-		background: var(--black);
-		color: white;
-		padding: 10px 20px;
 	}
 </style>

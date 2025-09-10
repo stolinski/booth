@@ -1,16 +1,13 @@
 {
 	"name": "booth",
-	"main": "src/edge.ts",
+	"main": ".svelte-kit/cloudflare/_worker.js",
 	"compatibility_date": "2025-01-01",
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"
 	},
 	"vars": {
-		// Primary or comma-separated list of model URLs
-		// Defaults to the built-in static asset path
-		"PUBLIC_RMBG_MODEL_URLS": "/models/modnet_portrait.onnx",
-		// Single URL fallback (also read by app)
-		"PUBLIC_RMBG_MODEL_URL": "/models/modnet_portrait.onnx"
+		"PUBLIC_RMBG_MODEL_URLS": "https://models.roboski.net/rmbg14.onnx",
+		"PUBLIC_RMBG_MODEL_URL": "https://models.roboski.net/rmbg14.onnx"
 	}
 }

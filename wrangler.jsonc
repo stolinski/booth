@@ -1,6 +1,6 @@
 {
 	"name": "booth",
-	"main": ".svelte-kit/cloudflare/_worker.js",
+	"main": "src/edge.ts",
 	"compatibility_date": "2025-01-01",
 	"assets": {
 		"binding": "ASSETS",

@@ -6,7 +6,7 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
 
 **Quick Start**
 
-- **Prereqs:** Node 20+ (or Bun), modern Chromium-based browser. File System Access API and OffscreenCanvas are required for full functionality.
+- **Prereqs:** Bun 1.1+ (bundled Node API), modern Chromium-based browser. File System Access API and OffscreenCanvas are required for full functionality.
 - **Install:** `bun install` (or `bun i`).
 - **Dev:** `bun run dev` then open the printed URL.
 - **Build:** `bun run build` • **Preview:** `bun run preview`
@@ -77,7 +77,7 @@ Design inspired by https://thomasmcinnis.com/posts/teenage-engineering-calculato
   - Remove `vite-plugin-devtools-json` if not needed.
 - **DX & consistency:**
   - Choose a single package manager; add "packageManager": "bun@<version>" (or `pnpm@…`/`npm@…`) to `package.json` and commit the corresponding lockfile only.
-  - Add a minimal CI workflow to run `npm run lint` and `npm run check` on PRs.
+  - Add a minimal CI workflow to run `bun run lint` and `bun run check` on PRs.
 - **UX improvements:**
   - Surface segmentation errors per-emotion in the gallery with a retry button.
   - Consider a small progress indicator overlay during “process cutouts”.

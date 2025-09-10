@@ -2,6 +2,7 @@
 	"name": "booth",
 	"private": true,
 	"version": "0.0.1",
+	"packageManager": "bun@1.1.38",
 	"type": "module",
 	"dependencies": {
 		"onnxruntime-web": "^1.19.0"

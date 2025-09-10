@@ -2,9 +2,9 @@ AGENTS for this repo (SvelteKit v2 + Svelte 5)
 
 - Dev: `bun run dev` • Build: `bun run build` • Preview: `bun run preview`
 - Lint: `bun run lint` (Prettier check + ESLint) • Format: `bun run format`
-- Typecheck: `npm run check` • Watch: `npm run check:watch`
-- Tests: none configured; when adding Vitest: `npx vitest`, single file: `npx vitest path/to/file.test.ts`, single test: `npx vitest -t "name"`
-- Single-file lint/format: `eslint path` (add `--fix`) • `prettier --write path`
+- Typecheck: `bun run check` • Watch: `bun run check:watch`
+- Tests: none configured; when adding Vitest: `bunx vitest`, single file: `bunx vitest path/to/file.test.ts`, single test: `bunx vitest -t "name"`
+- Single-file lint/format: `bunx eslint path` (add `--fix`) • `bunx prettier --write path`
 - ESM only (`"type":"module"`); prefer `$lib/...` for internal modules, relative for siblings
 - Import order: std libs → external → `$lib` → relative; avoid deep `../..` chains
 - Formatting (Prettier): useTabs=true, singleQuote=true, trailingComma=none, printWidth=100
